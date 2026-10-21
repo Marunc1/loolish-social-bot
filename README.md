@@ -40,34 +40,31 @@ Totul rulează pe **Cloudflare Workers Free** (0 lei):
 ```bash
 npm i
 npx wrangler kv namespace create SOCIAL_KV   # doar la prima creare
+npx wrangler secret put DISCORD_WEBHOOK_URL  # URL-ul webhook-ului
 npx wrangler deploy
 ```
 
 ### Discord
 
-Varianta 1 — **webhook** (zero setup, dar **NU poate suna @everyone**):
+**Setarea activă: webhook, fără `@everyone`.**
 ```bash
-npx wrangler secret put DISCORD_WEBHOOK_URL
+npx wrangler secret put DISCORD_WEBHOOK_URL   # URL-ul webhook-ului din canalul țintă
 ```
+Canalul de destinație e cel al webhook-ului (nu mai trebuie setat `DISCORD_CHANNEL_ID`).
+Secretul poate conține mai multe webhook-uri separate prin virgulă (mesajul se trimite în toate).
 
-Varianta 2 — **bot token** (nevoie dacă vrei `@everyone` la fiecare anunt):
+Varianta alternativă — **bot token** (doar dacă vrei `@everyone` la fiecare anunt):
 ```bash
 npx wrangler secret put DISCORD_BOT_TOKEN
 npx wrangler secret put DISCORD_CHANNEL_ID
 ```
 Botul are nevoie de permisiunile **Send Messages**, **Embed Links** și **Mention Everyone**
-în canalul țintă.
+în canalul țintă, plus de invitația lui în server.
 
 `src/config.js` → `discord.mode`:
-- `auto` (default) — folosește webhook-ul dacă există, altfel botul
-- `webhook` — doar webhook
+- `webhook` (activ acum) — doar webhook, fără ping
+- `auto` — webhook dacă există, altfel botul
 - `bot` — doar botul (cu `@everyone`, dacă `discord.mentionEveryone` e `true`)
-
-**Schimbarea webhook-ului** (când e gata canalul oficial):
-```bash
-npx wrangler secret put DISCORD_WEBHOOK_URL   # dai noul URL
-```
-Poate conține mai multe webhook-uri separate prin virgulă (mesajul se trimite în toate).
 
 ## Comenzi
 
