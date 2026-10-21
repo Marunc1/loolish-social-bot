@@ -19,11 +19,6 @@ export function buildEmbed(item) {
   };
   if (item.publishedAt) embed.timestamp = item.publishedAt;
 
-  const fields = [];
-  if (item.likes) fields.push({ name: "👍 Likes", value: String(item.likes), inline: true });
-  if (item.comments) fields.push({ name: "💬 Comentarii", value: String(item.comments), inline: true });
-  if (fields.length) embed.fields = fields;
-
   return embed;
 }
 
@@ -39,10 +34,11 @@ async function downloadImage(url) {
       signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) return null;
-    const type = res.headers.get("content-type") || "image/jpeg";
-    if (!type.startsWith("image/")) return null;
+    const type = (res.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    // Discord nu stie sa afiseze .heic (Instagram trimite asa)
+    if (!["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"].includes(type)) return null;
     const buf = await res.arrayBuffer();
-    if (!buf || buf.byteLength < 1000) return null;
+    if (!buf || buf.byteLength < 1000 || buf.byteLength > 5 * 1024 * 1024) return null;
     return { bytes: buf, type };
   } catch {
     return null;
@@ -60,7 +56,11 @@ export async function postToDiscord(env, item) {
 
   if (!webhookUrl && !channelId) throw new Error("lipseste DISCORD_CHANNEL_ID / DISCORD_WEBHOOK_URL");
 
-  const image = item.thumbnail ? await downloadImage(item.thumbnail) : null;
+  const image = item.imageData
+    ? { bytes: item.imageData, type: "image/jpeg" }
+    : item.thumbnail
+      ? await downloadImage(item.thumbnail)
+      : null;
 
   if (image) {
     // trimitem imaginea in Discord si folosim URL-ul atasamentului
@@ -77,12 +77,15 @@ export async function postToDiscord(env, item) {
       const url = msg.attachments && msg.attachments[0] && msg.attachments[0].url;
       if (url) {
         embed.image = { url };
-        const res2 = await fetch(endpoint, {
+        const patchUrl = webhookUrl
+          ? `${webhookUrl}/messages/${msg.id}`
+          : `${API}/channels/${channelId}/messages/${msg.id}`;
+        const res2 = await fetch(patchUrl, {
           method: "PATCH",
           headers: { ...authHeaders(env), "content-type": "application/json" },
           body: JSON.stringify({ embeds: [embed] }),
         });
-        if (res2.ok) return { ok: true, id: msg.id };
+        if (!res2.ok) console.error("discord patch", res2.status, (await res2.text()).slice(0, 150));
       }
       return { ok: true, id: msg.id };
     }

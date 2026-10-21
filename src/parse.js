@@ -86,3 +86,12 @@ export function parseInstagramMeta(ogTitle, ogDescription) {
 
   return { caption, likes, comments, dateText, publishedAt };
 }
+
+// Instagram serveste imaginile ca .heic -> Discord nu le afiseaza.
+// Parametrul "stp" controleaza transformarea: dst-jpg_e35_tt6 converteste in JPEG.
+export function toJpgUrl(url) {
+  if (!url) return "";
+  if (!/\.heic(\?|$)/i.test(url) && !/stp=/.test(url)) return url;
+  if (/stp=/.test(url)) return url.replace(/stp=[^&]*/i, "stp=dst-jpg_e35_tt6");
+  return url.replace(/\.heic(\?|$)/i, ".jpg$1");
+}

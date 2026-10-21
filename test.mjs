@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { decodeEntities, stripCdata, tagText, splitItems, clampText, parseInstagramMeta } from "./src/parse.js";
+import { decodeEntities, stripCdata, tagText, splitItems, clampText, parseInstagramMeta, toJpgUrl } from "./src/parse.js";
 
 // --- entitati ---
 assert.equal(decodeEntities("a &amp; b &lt;c&gt; &quot;d&quot; &#39;e&#39;"), `a & b <c> "d" 'e'`);
@@ -42,5 +42,13 @@ assert.ok(meta.publishedAt, "publishedAt parsat");
 // --- clamp ---
 assert.equal(clampText("abc", 10), "abc");
 assert.equal(clampText("abcdefghij", 5).length, 5);
+
+// --- heic -> jpg (Instagram) ---
+const heic =
+  "https://scontent-fra3-1.cdninstagram.com/v/t51.82787-15/abc_n.heic?stp=c288.0.864.864a&_nc_ht=x&oe=123";
+const jpg = toJpgUrl(heic);
+assert.ok(jpg.includes("stp=dst-jpg_e35_tt6"), "stp convertit in jpg");
+assert.ok(jpg.includes("_nc_ht=x") && jpg.includes("oe=123"), "parametrii semnatura pastrati");
+assert.equal(toJpgUrl("https://ex.com/imagine.jpg"), "https://ex.com/imagine.jpg");
 
 console.log("parse tests ok | toate testele au trecut");

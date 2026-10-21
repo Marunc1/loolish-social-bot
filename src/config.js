@@ -25,7 +25,7 @@ export const CONFIG = {
       "https://rsshub.ktachibana.party",
       "https://rsshub.app",
       "https://rsshub.rssforever.com",
-      "https://rss.injahow.cn",
+      "https://rsshub.injahow.cn",
       "https://rsshub.feeded.xyz",
     ],
   },

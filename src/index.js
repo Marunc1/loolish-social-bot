@@ -1,7 +1,8 @@
 import { CONFIG } from "./config.js";
 import { collectInstagramPosts } from "./instagram.js";
 import { fetchTikTokPosts } from "./tiktok.js";
-import { postToDiscord, postPlain } from "./discord.js";
+import { postToDiscord } from "./discord.js";
+import { withBrowser } from "./browser.js";
 
 const STATE_KEY = "state:seen";
 const RUN_KEY = "state:lastRun";
@@ -22,6 +23,19 @@ export default {
       await tick(env);
       return json(await status(env));
     }
+    if (url.pathname === "/probe" && debugAllowed(env)) {
+      const target = url.searchParams.get("url");
+      try {
+        const res = await fetch(target, {
+          headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0 Safari/537.36" },
+          signal: AbortSignal.timeout(25000),
+        });
+        const text = await res.text();
+        return json({ status: res.status, len: text.length, head: text.slice(0, 1200) });
+      } catch (err) {
+        return json({ error: String(err && err.message) });
+      }
+    }
     if (url.pathname === "/test" && debugAllowed(env)) {
       const sample = {
         platform: url.searchParams.get("platform") || "instagram",
@@ -29,7 +43,7 @@ export default {
         url: "https://www.instagram.com/loolishgaming/",
         isReel: url.searchParams.get("reel") === "1",
         caption:
-          "Test Loolish Social Bot.\n\nAcesta e un mesaj de test - arată cum arată anunțul cu imagine, caption și link.",
+          "Test Loolish Social Bot.\n\nAcesta e un mesaj de test - arată cum arată anunțul cu imagine, caption, like-uri și link.",
         title: "Test",
         thumbnail: url.searchParams.get("img") || "",
         likes: 42,
@@ -65,17 +79,15 @@ async function loadState(kv) {
 async function saveState(kv, state) {
   const entries = Object.entries(state.seen || {});
   entries.sort((a, b) => (a[1] || 0) - (b[1] || 0));
-  const keep = entries.slice(-CONFIG.poll.keepSeen);
-  state.seen = Object.fromEntries(keep);
+  state.seen = Object.fromEntries(entries.slice(-CONFIG.poll.keepSeen));
   await kv.put(STATE_KEY, JSON.stringify(state));
 }
 
-function isSeen(state, key) {
-  return Boolean(state.seen && state.seen[key]);
-}
-
-function platformSeenCount(state, platform) {
-  return Object.keys(state.seen || {}).filter((k) => k.startsWith(platform + ":")).length;
+function knownIds(state, platform) {
+  const prefix = platform + ":";
+  return Object.keys(state.seen || {})
+    .filter((k) => k.startsWith(prefix))
+    .map((k) => k.slice(prefix.length));
 }
 
 async function tick(env) {
@@ -84,65 +96,74 @@ async function tick(env) {
   const now = Date.now();
   const report = { at: new Date(now).toISOString(), announced: [], errors: [] };
 
-  // ---- TikTok (RSS, fara browser) ----
+  // ---- 1. TikTok: lista de video-uri din RSS (fara browser) ----
+  let ttItems = [];
   if (CONFIG.tiktok.enabled) {
     try {
       const { source, items } = await fetchTikTokPosts(env);
       report.tiktok = { source, found: items.length };
-      if (!items.length) {
-        report.errors.push("tiktok: feed gol");
-      } else {
-        const fresh = items.filter((it) => !isSeen(state, `tiktok:${it.id}`));
-        const firstRun = platformSeenCount(state, "tiktok") === 0;
-        if (firstRun) {
-          for (const it of items) state.seen[`tiktok:${it.id}`] = now;
-          report.tiktok.bootstrapped = true;
-        } else if (fresh.length) {
-          for (const it of fresh.slice(0, CONFIG.poll.maxAnnouncePerRun)) {
-            try {
-              await postToDiscord(env, it);
-              state.seen[`tiktok:${it.id}`] = now;
-              report.announced.push(`tiktok:${it.id}`);
-            } catch (err) {
-              report.errors.push(`tiktok post ${it.id}: ${err && err.message}`);
-            }
-          }
-        }
-      }
+      ttItems = items;
+      if (!items.length) report.errors.push("tiktok: feed gol");
     } catch (err) {
       report.errors.push(`tiktok: ${err && err.message}`);
     }
   }
 
-  // ---- Instagram (Browser Run) ----
-  if (CONFIG.instagram.enabled) {
-    const known = Object.keys(state.seen || {})
-      .filter((k) => k.startsWith("instagram:"))
-      .map((k) => k.slice("instagram:".length));
-    try {
-      const { items, ids } = await collectInstagramPosts(env, known);
-      report.instagram = { found: ids.length, new: items.length };
-      if (!ids.length) {
-        report.errors.push("instagram: profil gol (posibil blocat sau fara browser time)");
-      } else {
-        const firstRun = platformSeenCount(state, "instagram") === 0;
-        if (firstRun) {
-          for (const id of ids) state.seen[`instagram:${id}`] = now;
-          report.instagram.bootstrapped = true;
-        } else {
-          for (const it of items.slice(0, CONFIG.poll.maxAnnouncePerRun)) {
-            try {
-              await postToDiscord(env, it);
-              state.seen[`instagram:${it.id}`] = now;
-              report.announced.push(`instagram:${it.id}`);
-            } catch (err) {
-              report.errors.push(`instagram post ${it.id}: ${err && err.message}`);
-            }
-          }
+  const ttKnown = knownIds(state, "tiktok");
+  const ttFresh = ttItems.filter((it) => !ttKnown.includes(it.id));
+  const ttFirstRun = ttKnown.length === 0;
+
+  const igKnown = knownIds(state, "instagram");
+  const igFirstRun = igKnown.length === 0;
+
+  // ---- 2. Browser: doar Instagram (TikTok vine complet din RSS) ----
+  let igResult = { items: [], total: 0, ids: [] };
+  try {
+    await withBrowser(env, async (browser) => {
+      if (CONFIG.instagram.enabled) {
+        igResult = await collectInstagramPosts(browser, igKnown, { details: !igFirstRun });
+      }
+    });
+  } catch (err) {
+    report.errors.push(`browser: ${err && err.message}`);
+  }
+
+  // ---- 3. Anunturi TikTok ----
+  if (CONFIG.tiktok.enabled && ttItems.length) {
+    if (ttFirstRun) {
+      for (const it of ttItems) state.seen[`tiktok:${it.id}`] = now;
+      report.tiktok.bootstrapped = true;
+    } else if (ttFresh.length) {
+      for (const it of ttFresh.slice(0, CONFIG.poll.maxAnnouncePerRun)) {
+        try {
+          const res = await postToDiscord(env, it);
+          state.seen[`tiktok:${it.id}`] = now;
+          report.announced.push(`tiktok:${it.id} (msg ${res.id})`);
+        } catch (err) {
+          report.errors.push(`tiktok post ${it.id}: ${err && err.message}`);
         }
       }
-    } catch (err) {
-      report.errors.push(`instagram: ${err && err.message}`);
+    }
+  }
+
+  // ---- 4. Anunturi Instagram ----
+  if (CONFIG.instagram.enabled) {
+    report.instagram = { found: igResult.ids.length, new: igResult.items.length };
+    if (!igResult.ids.length) {
+      report.errors.push("instagram: profil gol (posibil blocat sau fara browser time)");
+    } else if (igFirstRun) {
+      for (const id of igResult.ids) state.seen[`instagram:${id}`] = now;
+      report.instagram.bootstrapped = true;
+    } else {
+      for (const it of igResult.items.slice(0, CONFIG.poll.maxAnnouncePerRun)) {
+        try {
+          const res = await postToDiscord(env, it);
+          state.seen[`instagram:${it.id}`] = now;
+          report.announced.push(`instagram:${it.id} (msg ${res.id})`);
+        } catch (err) {
+          report.errors.push(`instagram post ${it.id}: ${err && err.message}`);
+        }
+      }
     }
   }
 
@@ -159,8 +180,8 @@ async function status(env) {
   return {
     brand: CONFIG.brand,
     platforms: {
-      instagram: { username: CONFIG.instagram.username, seen: platformSeenCount(state, "instagram") },
-      tiktok: { username: CONFIG.tiktok.username, seen: platformSeenCount(state, "tiktok") },
+      instagram: { username: CONFIG.instagram.username, seen: knownIds(state, "instagram").length },
+      tiktok: { username: CONFIG.tiktok.username, seen: knownIds(state, "tiktok").length },
     },
     lastRun: lastRun ? JSON.parse(lastRun) : null,
   };

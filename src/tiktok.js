@@ -4,8 +4,7 @@ import { tagText, splitItems, clampText } from "./parse.js";
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-export async function fetchTikTokPosts(env) {
-  for (const base of CONFIG.tiktok.rssInstances) {
+export async function fetchTikTokPosts(env) {  for (const base of CONFIG.tiktok.rssInstances) {
     const url = `${base}/tiktok/user/@${CONFIG.tiktok.username}`;
     try {
       const res = await fetch(url, {
