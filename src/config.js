@@ -11,7 +11,8 @@ export const CONFIG = {
 
   discord: {
     // ID-ul canalului (se poate seta si ca secret DISCORD_CHANNEL_ID)
-    channelId: "REPLACE_ME",
+    // #anunturi - canalul oficial de anunturi
+    channelId: "415634300042608641",
     // Webhook Discord - daca e setat (secret DISCORD_WEBHOOK_URL) are prioritate
     // fata de bot, deci nu e nevoie de token deloc.
     // Secretul poate contine MAI MULTE webhook-uri separate prin virgula
