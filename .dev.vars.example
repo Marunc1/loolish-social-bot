@@ -1,0 +1,11 @@
+# Copiază acest fișier în .dev.vars și completează valorile:
+#   Copy-Item .dev.vars.example .dev.vars
+
+# Bot Discord (alternativă: folosește doar DISCORD_WEBHOOK_URL)
+DISCORD_BOT_TOKEN=tokenul-botului-aici
+
+# ID-ul canalului Discord (ex: 1557464841864613928)
+DISCORD_CHANNEL_ID=id-canal-aici
+
+# Webhook Discord (opțional - dacă e setat, are prioritate față de bot)
+# DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...

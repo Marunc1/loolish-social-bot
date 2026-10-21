@@ -1,0 +1,15 @@
+name = "loolish-social-bot"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Cron: o data pe ora (gratuit: Browser Run free = 10 min/zi de browser time)
+[triggers]
+crons = ["7 * * * *"]
+
+[[kv_namespaces]]
+binding = "SOCIAL_KV"
+id = "cab485140c694a4ca78645a9eff24a9c"
+
+[browser]
+binding = "BROWSER"
