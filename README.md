@@ -12,12 +12,14 @@ Totul rulează pe **Cloudflare Workers Free** (0 lei):
 
 ## Cum funcționează
 
-1. Cron `7 * * * *` (o dată pe oră) → `tick`.
-2. **TikTok**: se citește feed-ul RSS public (RSSHub) → caption + link + data.
-3. **Instagram**: Browser Run deschide profilul și extrage linkurile postărilor (`/p/` = post, `/reel/` = reel).
+1. Cron `7 * * * *` (o dată pe oră) → rulare completă.
+2. Cron `*/15 * * * *` (la 15 min) → **doar TikTok** prin RSS (fără browser), ca să recuperăm
+   repede dacă instanța RSSHub pică.
+3. **TikTok**: se citește feed-ul RSS public (RSSHub) → caption + link + data.
+4. **Instagram**: Browser Run deschide profilul și extrage linkurile postărilor (`/p/` = post, `/reel/` = reel).
    Pentru fiecare post **nou** se deschide pagina de detaliu de unde se ia caption-ul.
-4. Ce e nou (față de `state:seen` din KV) se anunță în Discord cu un **embed** (text + link).
-5. La prima rulare nu se anunță nimic — se memorează doar ce există deja (bootstrap), ca să nu apară
+5. Ce e nou (față de `state:seen` din KV) se anunță în Discord cu un **embed** (text + link).
+6. La prima rulare nu se anunță nimic — se memorează doar ce există deja (bootstrap), ca să nu apară
    20 de mesaje vechi dintr-o dată.
 
 ### Detalii tehnice
@@ -26,6 +28,12 @@ Totul rulează pe **Cloudflare Workers Free** (0 lei):
 - **Un singur browser per rulare** (limita Workers Free: 1 browser nou la 20 secunde, 10 min browser/zi).
   Consum tipic: ~6s/rulare (doar pagina de profil) + ~8s per postare nouă (pagina postării).
 - TikTok nu folosește deloc browserul (totul vine din RSS).
+- **TikTok merge doar prin RSSHub** — pagina de profil TikTok cere login din IP-urile datacenter,
+  iar API-urile gratuite (tikwm, tiklydown, isxander) sunt blocate din edge. Singura sursă vie a fost
+  `rsshub.ktachibana.party`; restul instanțelor răspund 403/503/530. De aceea sunt 2 runde de
+  încercare + 5 instanțe în `config.js`, plus un cron la 15 min fără browser.
+- Instagram poate întoarce profilul gol tranzitoriu (rate limit / login wall) → se reîncearcă
+  automat o dată după 20s.
 
 ## Setup
 
@@ -72,6 +80,7 @@ npm test          # teste de parsing (fără browser)
 Endpoints:
 - `GET /status` — stare (câte id-uri sunt cunoscute, ultimul raport de rulare)
 - `GET /run` — rulare manuală (doar dacă există secretul `ALLOW_DEBUG=1`)
+- `GET /run?browser=0` — rulare doar-TikTok (fără browser), pentru testare
 
 ## Debug
 
@@ -89,8 +98,10 @@ Când `ALLOW_DEBUG=1`:
 ## Config (src/config.js)
 
 - `discord.channelId` / `discord.webhookUrl`
+- `discord.mode` — `auto` | `webhook` | `bot` (acum `bot`, ca să sune `@everyone`)
+- `cron.full` / `cron.tiktokOnly` — expresiile cron (din `wrangler.toml` trebuie să coincidă)
 - `instagram.username` — handle-ul de pe Instagram
 - `instagram.maxDetailPages` — câte postări noi deschidem per rulare
-- `tiktok.username` + `tiktok.rssInstances` — instanțele RSSHub (se încearcă pe rând)
+- `tiktok.username` + `tiktok.rssInstances` — instanțele RSSHub (se încearcă pe rând, 2 runde)
 - `poll.maxAnnouncePerRun` — câte anunțuri maximum pe rulare
 - `messages.*` — titlurile embed-urilor

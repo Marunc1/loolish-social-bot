@@ -3,9 +3,12 @@ main = "src/index.js"
 compatibility_date = "2025-09-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Cron: o data pe ora (gratuit: Browser Run free = 10 min/zi de browser time)
+# Cron:
+#  - "7 * * * *"  = rulare completa (Instagram via browser + TikTok RSS)
+#  - "*/15 * * * *" = doar TikTok prin RSS (fara browser, recover rapid daca RSSHub pica)
+# Gratuit: Browser Run free = 10 min/zi browser time (doar cronul orar consuma browser)
 [triggers]
-crons = ["7 * * * *"]
+crons = ["7 * * * *", "*/15 * * * *"]
 
 [[kv_namespaces]]
 binding = "SOCIAL_KV"

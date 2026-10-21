@@ -4,6 +4,16 @@ import { newPage } from "./browser.js";
 
 export async function collectInstagramPosts(browser, knownIds = [], options = {}) {
   const details = options.details !== false;
+  // 2 incercari: uneori profilul intra in login wall sau rate-limit temporar
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await collectOnce(browser, knownIds, details);
+    if (res.total || attempt === 1) return res;
+    console.error("instagram: profil gol, reiau dupa 20s");
+    await new Promise((r) => setTimeout(r, 20000));
+  }
+}
+
+async function collectOnce(browser, knownIds, details) {
   const page = await newPage(browser);
   try {
     const profile = `https://www.instagram.com/${CONFIG.instagram.username}/`;

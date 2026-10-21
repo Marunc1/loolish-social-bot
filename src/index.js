@@ -10,7 +10,10 @@ const RUN_KEY = "state:lastRun";
 export default {
   async scheduled(event, env, ctx) {
     try {
-      await tick(env);
+      // cron la 15 min: doar TikTok prin RSS (fara browser, ~0 sec browser time)
+      // cron orar: rulare completa (Instagram via browser + TikTok RSS)
+      const full = event.cron === CONFIG.cron.full;
+      await tick(env, { browser: full });
     } catch (err) {
       console.error("scheduled:", err && err.message);
     }
@@ -20,7 +23,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/status") return json(await status(env));
     if (url.pathname === "/run" && debugAllowed(env)) {
-      await tick(env);
+      await tick(env, { browser: url.searchParams.get("browser") !== "0" });
       return json(await status(env));
     }
     if (url.pathname === "/probe" && debugAllowed(env)) {
@@ -35,6 +38,12 @@ export default {
       } catch (err) {
         return json({ error: String(err && err.message) });
       }
+    }
+    if (url.pathname === "/ttprobe" && debugAllowed(env)) {
+      const state = await loadState(env.SOCIAL_KV);
+      const known = knownIds(state, "tiktok");
+      const res = await withBrowser(env, (browser) => collectTikTokBrowser(browser, known));
+      return json({ ids: res.ids, items: res.items.map((i) => ({ id: i.id, url: i.url, cap: i.caption })) });
     }
     if (url.pathname === "/test" && debugAllowed(env)) {
       const sample = {
@@ -89,7 +98,8 @@ function knownIds(state, platform) {
     .map((k) => k.slice(prefix.length));
 }
 
-async function tick(env) {
+async function tick(env, opts = {}) {
+  const withBrowserToo = opts.browser !== false;
   const kv = env.SOCIAL_KV;
   const state = await loadState(kv);
   const now = Date.now();
@@ -102,30 +112,30 @@ async function tick(env) {
       const { source, items } = await fetchTikTokPosts(env);
       report.tiktok = { source, found: items.length };
       ttItems = items;
-      if (!items.length) report.errors.push("tiktok: feed gol");
+      if (!items.length) report.errors.push("tiktok: feed gol (nicio instanta RSSHub n-a raspuns)");
     } catch (err) {
       report.errors.push(`tiktok: ${err && err.message}`);
     }
   }
 
   const ttKnown = knownIds(state, "tiktok");
-  const ttFresh = ttItems.filter((it) => !ttKnown.includes(it.id));
-  const ttFirstRun = ttKnown.length === 0;
-
   const igKnown = knownIds(state, "instagram");
+  const ttFirstRun = ttKnown.length === 0;
   const igFirstRun = igKnown.length === 0;
 
-  // ---- 2. Browser: doar Instagram (TikTok vine complet din RSS) ----
+  // ---- 2. Browser: doar Instagram (consuma timp de browser) ----
   let igResult = { items: [], total: 0, ids: [] };
-  try {
-    await withBrowser(env, async (browser) => {
-      if (CONFIG.instagram.enabled) {
+  if (withBrowserToo && CONFIG.instagram.enabled) {
+    try {
+      await withBrowser(env, async (browser) => {
         igResult = await collectInstagramPosts(browser, igKnown, { details: !igFirstRun });
-      }
-    });
-  } catch (err) {
-    report.errors.push(`browser: ${err && err.message}`);
+      });
+    } catch (err) {
+      report.errors.push(`browser: ${err && err.message}`);
+    }
   }
+
+  const ttFresh = ttItems.filter((it) => !ttKnown.includes(it.id));
 
   // ---- 3. Anunturi TikTok ----
   if (CONFIG.tiktok.enabled && ttItems.length) {
@@ -146,7 +156,7 @@ async function tick(env) {
   }
 
   // ---- 4. Anunturi Instagram ----
-  if (CONFIG.instagram.enabled) {
+  if (withBrowserToo && CONFIG.instagram.enabled) {
     report.instagram = { found: igResult.ids.length, new: igResult.items.length };
     if (!igResult.ids.length) {
       report.errors.push("instagram: profil gol (posibil blocat sau fara browser time)");
