@@ -22,6 +22,27 @@ export default {
       await tick(env);
       return json(await status(env));
     }
+    if (url.pathname === "/test" && debugAllowed(env)) {
+      const sample = {
+        platform: url.searchParams.get("platform") || "instagram",
+        id: "test-1",
+        url: "https://www.instagram.com/loolishgaming/",
+        isReel: url.searchParams.get("reel") === "1",
+        caption:
+          "Test Loolish Social Bot.\n\nAcesta e un mesaj de test - arată cum arată anunțul cu imagine, caption și link.",
+        title: "Test",
+        thumbnail: url.searchParams.get("img") || "",
+        likes: 42,
+        comments: 7,
+        publishedAt: new Date().toISOString(),
+      };
+      try {
+        const res = await postToDiscord(env, sample);
+        return json({ ok: true, ...res });
+      } catch (err) {
+        return json({ ok: false, error: String(err && err.message) }, { status: 500 });
+      }
+    }
     return new Response("Loolish social bot activ.", { status: 200 });
   },
 };
