@@ -6,8 +6,14 @@ export const CONFIG = {
     // ID-ul canalului (se poate seta si ca secret DISCORD_CHANNEL_ID)
     channelId: "REPLACE_ME",
     // Webhook Discord - daca e setat (secret DISCORD_WEBHOOK_URL) are prioritate
-    // fata de bot, deci nu e nevoie de token deloc
+    // fata de bot, deci nu e nevoie de token deloc.
+    // Secretul poate contine MAI MULTE webhook-uri separate prin virgula
+    // (ex: canal de test + canal oficial) - mesajul se trimite in toate.
     webhookUrl: "",
+    // @everyone la fiecare anunt - functioneaza DOAR cu bot token (webhook-ul nu poate suna @everyone)
+    mentionEveryone: true,
+    // "auto" (default) = webhook daca exista, altfel bot | "webhook" | "bot"
+    mode: "auto",
   },
 
   instagram: {

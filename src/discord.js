@@ -27,25 +27,62 @@ function authHeaders(env) {
   return token ? { authorization: `Bot ${token}` } : {};
 }
 
+// Secretul poate avea mai multe webhook-uri (separate prin virgula sau spatiu).
+export function webhookUrls(env) {
+  const raw = (env.DISCORD_WEBHOOK_URL || CONFIG.discord.webhookUrl || "").toString();
+  const list = raw
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.startsWith("https://"));
+  return [...new Set(list)];
+}
+
 export async function postToDiscord(env, item) {
-  const webhookUrl = env.DISCORD_WEBHOOK_URL || CONFIG.discord.webhookUrl;
+  const mode = (CONFIG.discord.mode || "auto").toLowerCase();
+  const hooks = mode === "bot" ? [] : webhookUrls(env);
   const channelId = env.DISCORD_CHANNEL_ID || CONFIG.discord.channelId;
+  const token = env.DISCORD_BOT_TOKEN;
+  const useBot = mode !== "webhook" && Boolean(token) && channelId && channelId !== "REPLACE_ME";
   const embed = buildEmbed(item);
 
-  if (!webhookUrl && !channelId) throw new Error("lipseste DISCORD_CHANNEL_ID / DISCORD_WEBHOOK_URL");
-
-  const endpoint = webhookUrl
-    ? `${webhookUrl}${webhookUrl.includes("?") ? "&" : "?"}wait=true`
-    : `${API}/channels/${channelId}/messages`;
-
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { ...authHeaders(env), "content-type": "application/json" },
-    body: JSON.stringify({ embeds: [embed] }),
-  });
-  if (!res.ok) {
-    throw new Error(`discord ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (!hooks.length && !useBot) {
+    throw new Error("lipseste DISCORD_CHANNEL_ID / DISCORD_WEBHOOK_URL");
   }
-  const msg = await res.json();
-  return { ok: true, id: msg.id };
+
+  // @everyone merge doar prin bot token - webhook-ul nu are voie sa sune @everyone
+  const mention = useBot && CONFIG.discord.mentionEveryone;
+  const payload = { embeds: [embed], allowed_mentions: { parse: ["everyone", "roles", "users"] } };
+  if (mention) payload.content = "@everyone";
+
+  const results = [];
+
+  for (const hook of hooks) {
+    const endpoint = `${hook}${hook.includes("?") ? "&" : "?"}wait=true`;
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { ...authHeaders(env), "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`discord ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    }
+    const msg = await res.json();
+    results.push({ ok: true, id: msg.id, via: "webhook" });
+  }
+
+  if (useBot) {
+    const res = await fetch(`${API}/channels/${channelId}/messages`, {
+      method: "POST",
+      headers: { ...authHeaders(env), "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`discord ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    }
+    const msg = await res.json();
+    results.push({ ok: true, id: msg.id, via: "bot" });
+  }
+
+  if (!results.length) throw new Error("nu s-a trimis niciun mesaj");
+  return { ok: true, id: results[0].id, sent: results.length, via: results.map((r) => r.via).join("+") };
 }
