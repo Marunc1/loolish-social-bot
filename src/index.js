@@ -45,7 +45,6 @@ export default {
         caption:
           "Test Loolish Social Bot.\n\nAcesta e un mesaj de test - arată cum arată anunțul cu imagine, caption, like-uri și link.",
         title: "Test",
-        thumbnail: url.searchParams.get("img") || "",
         likes: 42,
         comments: 7,
         publishedAt: new Date().toISOString(),

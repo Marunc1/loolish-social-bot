@@ -33,23 +33,19 @@ function parseItem(item) {
   const link = tagText(item, "link");
   const id = (link.match(/\/video\/(\d+)/) || [])[1] || "";
   if (!id) return null;
-  const description = tagText(item, "description");
-  const thumbnail = (description.match(/poster="([^"]+)"/) || [])[1] || "";
-  const videoUrl = (description.match(/<source src="([^"]+)"/) || [])[1] || "";
   const pubDate = tagText(item, "pubDate");
   let publishedAt = null;
   if (pubDate) {
     const t = Date.parse(pubDate);
     if (Number.isFinite(t)) publishedAt = new Date(t).toISOString();
   }
+  const caption = clampText(tagText(item, "title"), 3500);
   return {
     platform: "tiktok",
     id,
     url: link,
     title: clampText(tagText(item, "title"), 300),
-    caption: clampText(tagText(item, "title"), 3500),
-    thumbnail,
-    videoUrl,
+    caption,
     publishedAt,
     isReel: true,
   };

@@ -74,8 +74,6 @@ export function parseInstagramMeta(ogTitle, ogDescription) {
   if (quoted) caption = quoted[1].trim();
   if (!caption) caption = title.replace(/^.*?on Instagram:\s*/i, "").trim();
 
-  const likes = Number((/^(\d+)\s+likes?/i.exec(desc) || [])[1] || 0);
-  const comments = Number((/,\s*(\d+)\s+comments?/i.exec(desc) || [])[1] || 0);
   const dateText = (/ on ([A-Z][a-z]+ \d{1,2}, \d{4})/i.exec(desc) || [])[1] || "";
 
   let publishedAt = null;
@@ -84,14 +82,5 @@ export function parseInstagramMeta(ogTitle, ogDescription) {
     if (Number.isFinite(t)) publishedAt = new Date(t).toISOString();
   }
 
-  return { caption, likes, comments, dateText, publishedAt };
-}
-
-// Instagram serveste imaginile ca .heic -> Discord nu le afiseaza.
-// Parametrul "stp" controleaza transformarea: dst-jpg_e35_tt6 converteste in JPEG.
-export function toJpgUrl(url) {
-  if (!url) return "";
-  if (!/\.heic(\?|$)/i.test(url) && !/stp=/.test(url)) return url;
-  if (/stp=/.test(url)) return url.replace(/stp=[^&]*/i, "stp=dst-jpg_e35_tt6");
-  return url.replace(/\.heic(\?|$)/i, ".jpg$1");
+  return { caption, dateText, publishedAt };
 }

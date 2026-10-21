@@ -1,5 +1,5 @@
 import { CONFIG } from "./config.js";
-import { clampText, parseInstagramMeta, toJpgUrl } from "./parse.js";
+import { clampText, parseInstagramMeta } from "./parse.js";
 import { newPage } from "./browser.js";
 
 export async function collectInstagramPosts(browser, knownIds = [], options = {}) {
@@ -20,13 +20,10 @@ export async function collectInstagramPosts(browser, knownIds = [], options = {}
         const m = href.match(/\/(p|reel)\/([A-Za-z0-9_-]+)/);
         if (!m) continue;
         if (out.some((x) => x.id === m[2])) continue;
-        const img = a.querySelector("img");
         out.push({
           id: m[2],
           kind: m[1],
           url: new URL(href, location.origin).href,
-          thumb: img ? img.currentSrc || img.src || "" : "",
-          alt: img ? img.alt || "" : "",
         });
       }
       return out;
@@ -59,39 +56,12 @@ export async function collectInstagramPosts(browser, knownIds = [], options = {}
           .catch(() => console.error("instagram: og timeout", post.id));
         const meta = await page.evaluate(() => {
           const m = (p) => document.querySelector(`meta[property="${p}"]`)?.content || "";
-          const out = [];
-          const push = (u) => {
-            if (u && u.includes("scontent") && !u.includes("s150x150") && !out.includes(u)) out.push(u);
-          };
-          push(m("og:image"));
-          for (const i of document.querySelectorAll("article img, main img")) push(i.currentSrc || i.src);
-          const v = document.querySelector("article video, main video");
-          if (v) push(v.getAttribute("poster"));
           return {
             ogTitle: m("og:title"),
             ogDescription: m("og:description"),
-            candidates: out,
           };
         });
         const parsed = parseInstagramMeta(meta.ogTitle, meta.ogDescription);
-
-        // URL-urile imaginii sunt semnate de Instagram ("URL signature mismatch" la fetch),
-        // deci o descarcam prin browser, cu cookie-urile de sesiune.
-        let imageData = null;
-        for (const cand of meta.candidates.slice(0, 3)) {
-          try {
-            const res = await page.goto(cand, { waitUntil: "load", timeout: 20000 });
-            const ct = (res.headers()["content-type"] || "").toLowerCase();
-            if (!/^image\/(jpeg|jpg|png|webp)/.test(ct)) continue;
-            const buf = await res.buffer();
-            if (buf && buf.length > 3000) {
-              imageData = new Uint8Array(buf);
-              break;
-            }
-          } catch (err) {
-            console.error("instagram img fail", post.id, err && err.message);
-          }
-        }
 
         items.push({
           platform: "instagram",
@@ -101,10 +71,6 @@ export async function collectInstagramPosts(browser, knownIds = [], options = {}
           isReel: post.kind === "reel",
           caption: clampText(parsed.caption, 3500),
           title: clampText(parsed.caption.split("\n")[0] || "", 120),
-          thumbnail: toJpgUrl(meta.candidates[0] || post.thumb),
-          imageData,
-          likes: parsed.likes,
-          comments: parsed.comments,
           publishedAt: parsed.publishedAt,
         });
       } catch (err) {
