@@ -19,9 +19,9 @@ export const CONFIG = {
     // (ex: canal de test + canal oficial) - mesajul se trimite in toate.
     webhookUrl: "",
     // @everyone la fiecare anunt - functioneaza DOAR cu bot token (webhook-ul nu poate suna @everyone)
-    mentionEveryone: true,
+    mentionEveryone: false,
     // "auto" (default) = webhook daca exista, altfel bot | "webhook" | "bot"
-    mode: "bot",
+    mode: "webhook",
   },
 
   instagram: {

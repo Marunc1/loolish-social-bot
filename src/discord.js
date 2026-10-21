@@ -42,7 +42,12 @@ export async function postToDiscord(env, item) {
   const hooks = mode === "bot" ? [] : webhookUrls(env);
   const channelId = env.DISCORD_CHANNEL_ID || CONFIG.discord.channelId;
   const token = env.DISCORD_BOT_TOKEN;
-  const useBot = mode !== "webhook" && Boolean(token) && channelId && channelId !== "REPLACE_ME";
+  const hasChannel = channelId && channelId !== "REPLACE_ME";
+  // in modul "auto": webhook daca exista, altfel bot (niciodata amandoua)
+  const useBot =
+    mode === "bot" || (mode === "auto" && !hooks.length)
+      ? Boolean(token) && hasChannel
+      : false;
   const embed = buildEmbed(item);
 
   if (!hooks.length && !useBot) {
